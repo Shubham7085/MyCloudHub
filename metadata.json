@@ -1,0 +1,6 @@
+{
+  "name": "Multi Drive Cloud Storage",
+  "description": "Premium multi-cloud storage manager for connecting and managing up to 5 Google Drive accounts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
