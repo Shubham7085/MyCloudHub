@@ -2,7 +2,7 @@ import multer from "multer";
 import { Readable } from "stream";
 import express from 'express';
 import { google } from 'googleapis';
-import { db } from './db';
+import { db } from './db.js';
 import { requireAuth, AuthRequest } from './authMiddleware';
 
 const router = express.Router();
