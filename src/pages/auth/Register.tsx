@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function Register() {
+export function Register() {
   return (
     <div style={{ 
       display: 'flex', 
@@ -46,3 +46,4 @@ export default function Register() {
     </div>
   );
 }
+
