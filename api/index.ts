@@ -1,7 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import authRoutes from '../src/server/auth.ts';
-import drivesRoutes from '../src/server/drives.ts';
+import authRoutes from '../src/server/auth';
+import drivesRoutes from '../src/server/drives';
 
 const app = express();
 app.set('trust proxy', 1);
