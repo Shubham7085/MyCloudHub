@@ -1,7 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import authRoutes from '../src/server/auth';
-import drivesRoutes from '../src/server/drives';
+import authRoutes from '../src/server/auth.js';
+import drivesRoutes from '../src/server/drives.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -16,3 +16,4 @@ app.get('/api/health', (req, res) => {
 });
 
 export default app;
+
