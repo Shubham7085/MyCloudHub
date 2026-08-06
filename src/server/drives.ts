@@ -2,8 +2,8 @@ import multer from "multer";
 import { Readable } from "stream";
 import express from 'express';
 import { google } from 'googleapis';
-import { db } from './db.ts';
-import { requireAuth, AuthRequest } from './authMiddleware.ts';
+import { db } from './db';
+import { requireAuth, AuthRequest } from './authMiddleware';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
