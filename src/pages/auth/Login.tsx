@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function Login() {
+export function Login() {
   return (
     <div style={{ 
       display: 'flex', 
