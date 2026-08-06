@@ -3,7 +3,7 @@ import { Readable } from "stream";
 import express from 'express';
 import { google } from 'googleapis';
 import { db } from './db.js';
-import { requireAuth, AuthRequest } from './authMiddleware';
+import { requireAuth, AuthRequest } from './authMiddleware.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
