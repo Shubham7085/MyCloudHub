@@ -23,16 +23,16 @@ const getOAuth2Client = (req: express.Request) => {
   );
 };
 
-// 1. Initiate OAuth Flow
+// 1. Initiate OAuth
 router.get('/google/connect', requireAuth, async (req: AuthRequest, res) => {
   try {
     const drivesSnapshot = await db.collection('drives')
       .where('user_id', '==', req.user.id)
       .where('provider', '==', 'google')
       .get();
-      
+
     if (drivesSnapshot.size >= 5) {
-      return res.status(400).send('<script>window.opener.postMessage({ type: "OAUTH_ERROR", payload: "Maximum of 5 Google Drive accounts reached." }, "*"); window.close();</script>');
+      return res.redirect('/drives?error=' + encodeURIComponent('Maximum of 5 Google Drive accounts reached.'));
     }
 
     const oauth2Client = getOAuth2Client(req);
@@ -50,33 +50,32 @@ router.get('/google/connect', requireAuth, async (req: AuthRequest, res) => {
     res.redirect(url);
   } catch (error) {
     console.error('Error initiating Google OAuth:', error);
-    res.status(500).send('<script>window.opener.postMessage({ type: "OAUTH_ERROR", payload: "Failed to initiate connection." }, "*"); window.close();</script>');
+    res.redirect('/drives?error=' + encodeURIComponent('Failed to initiate connection.'));
   }
 });
 
-// 2. OAuth Callback
 router.get('/google/callback', async (req, res) => {
   try {
     const { code, error, state } = req.query;
 
     if (error) {
       console.error('OAuth error from Google:', error);
-      return res.send(`<script>window.opener.postMessage({ type: "OAUTH_ERROR", payload: "${error}" }, "*"); window.close();</script>`);
+      return res.redirect('/drives?error=' + encodeURIComponent(error as string));
     }
 
     if (!code || !state) {
-      return res.send('<script>window.opener.postMessage({ type: "OAUTH_ERROR", payload: "Missing code or state" }, "*"); window.close();</script>');
+      return res.redirect('/drives?error=' + encodeURIComponent('Missing code or state'));
     }
 
-    const userId = state as string; 
-    
+    const userId = state as string;
+
     const drivesSnapshot = await db.collection('drives')
       .where('user_id', '==', userId)
       .where('provider', '==', 'google')
       .get();
-      
+
     if (drivesSnapshot.size >= 5) {
-      return res.send('<script>window.opener.postMessage({ type: "OAUTH_ERROR", payload: "Maximum of 5 Google Drive accounts reached." }, "*"); window.close();</script>');
+      return res.redirect('/drives?error=' + encodeURIComponent('Maximum of 5 Google Drive accounts reached.'));
     }
 
     const oauth2Client = getOAuth2Client(req);
@@ -85,7 +84,7 @@ router.get('/google/callback', async (req, res) => {
 
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
     const userInfo = await oauth2.userinfo.get();
-    
+
     const providerAccountId = userInfo.data.id;
     const email = userInfo.data.email;
     const name = userInfo.data.name;
@@ -93,7 +92,7 @@ router.get('/google/callback', async (req, res) => {
 
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
     const about = await drive.about.get({ fields: 'storageQuota' });
-    
+
     const quota = about.data.storageQuota;
     const totalSpace = parseInt(quota?.limit || '0', 10);
     const usedSpace = parseInt(quota?.usage || '0', 10);
@@ -132,18 +131,12 @@ router.get('/google/callback', async (req, res) => {
       await newRef.set(newDriveData);
     }
 
-    res.send(`
-      <script>
-        window.opener.postMessage({ type: "OAUTH_SUCCESS" }, "*");
-        window.close();
-      </script>
-    `);
+    res.redirect('/drives?connected=true');
   } catch (error) {
     console.error('Google OAuth callback error:', error);
-    res.send('<script>window.opener.postMessage({ type: "OAUTH_ERROR", payload: "Failed to connect to Google Drive." }, "*"); window.close();</script>');
+    res.redirect('/drives?error=' + encodeURIComponent('Failed to connect to Google Drive.'));
   }
 });
-
 // 3. Get User Drives
 router.get('/', requireAuth, async (req: AuthRequest, res) => {
   try {
