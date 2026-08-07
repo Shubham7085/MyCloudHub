@@ -1,83 +1,81 @@
+// src/store/driveStore.ts
 import { create } from 'zustand';
 
-export interface Drive {
+interface Drive {
   id: string;
-  provider: 'google' | 'onedrive' | 'dropbox';
-  provider_account_id: string;
-  email: string;
+  provider: string;
   name: string;
-  avatar_url?: string;
-  used_space: number;
+  email: string;
   total_space: number;
-  status: 'healthy' | 'syncing' | 'error';
-  last_sync: string;
+  used_space: number;
 }
 
-interface DriveState {
+interface DriveStore {
   drives: Drive[];
   isLoading: boolean;
   error: string | null;
   fetchDrives: () => Promise<void>;
-  disconnectDrive: (id: string) => Promise<void>;
-  syncDrive: (id: string) => Promise<void>;
+  connectDemoDrive: (provider: string) => Promise<boolean>;
 }
 
-export const useDriveStore = create<DriveState>((set, get) => ({
+export const useDriveStore = create<DriveStore>((set) => ({
   drives: [],
   isLoading: false,
   error: null,
-  
+
   fetchDrives: async () => {
     set({ isLoading: true, error: null });
     try {
-      const res = await fetch('/api/drives', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        set({ drives: data.drives });
-      } else {
-        const err = await res.json();
-        set({ error: err.error || 'Failed to fetch drives' });
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/drives', {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch drives');
       }
-    } catch (err) {
-      set({ error: 'Network error while fetching drives' });
-    } finally {
-      set({ isLoading: false });
+
+      const data = await response.json();
+      set({ drives: Array.isArray(data) ? data : [], isLoading: false });
+    } catch (err: any) {
+      console.error('Fetch drives error:', err);
+      set({ error: err.message, isLoading: false });
     }
   },
 
-  disconnectDrive: async (id: string) => {
+  connectDemoDrive: async (provider: string) => {
+    set({ isLoading: true, error: null });
     try {
-      const res = await fetch(`/api/drives/${id}`, { method: 'DELETE', credentials: 'include' });
-      if (res.ok) {
-        set(state => ({ drives: state.drives.filter(d => d.id !== id) }));
-      }
-    } catch (err) {
-      console.error('Failed to disconnect drive:', err);
-    }
-  },
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/drives/connect-demo', {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ provider })
+      });
 
-  syncDrive: async (id: string) => {
-    // Optimistic status update
-    set(state => ({
-      drives: state.drives.map(d => d.id === id ? { ...d, status: 'syncing' } : d)
-    }));
-
-    try {
-      const res = await fetch(`/api/drives/${id}/sync`, { method: 'POST', credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        set(state => ({
-          drives: state.drives.map(d => d.id === id ? data.drive : d)
-        }));
-      } else {
-        set(state => ({
-          drives: state.drives.map(d => d.id === id ? { ...d, status: 'error' } : d)
-        }));
+      if (!response.ok) {
+        throw new Error('Failed to connect drive');
       }
-    } catch (err) {
-      set(state => ({
-        drives: state.drives.map(d => d.id === id ? { ...d, status: 'error' } : d)
-      }));
+
+      const data = await response.json();
+      if (data.success) {
+        // Refresh drives list
+        const store = useDriveStore.getState();
+        await store.fetchDrives();
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.error('Connect drive error:', err);
+      set({ error: err.message, isLoading: false });
+      return false;
     }
   }
 }));
+
