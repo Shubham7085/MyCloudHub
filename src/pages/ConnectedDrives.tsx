@@ -5,7 +5,7 @@ import { useDriveStore } from '../store/driveStore';
 import { HardDrive, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
-export default function ConnectedDrives() {
+export function ConnectedDrives() {
   const [searchParams] = useSearchParams();
   const { drives, isLoading, fetchDrives, connectDemoDrive } = useDriveStore();
 
@@ -78,3 +78,5 @@ export default function ConnectedDrives() {
     </div>
   );
 }
+
+export default ConnectedDrives;
