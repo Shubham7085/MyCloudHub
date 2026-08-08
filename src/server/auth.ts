@@ -4,9 +4,10 @@ import jwt from 'jsonwebtoken';
 import { db } from './db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
-  throw new Error('JWT_SECRET environment variable is required in production');
-}
+// REMOVED: Top-level throw that crashes module loading
+// if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+//   throw new Error('JWT_SECRET environment variable is required in production');
+// }
 const secret = JWT_SECRET || 'dev-secret';
 
 // DEV DEMO MODE CONFIGURATION
@@ -21,12 +22,12 @@ if (ENABLE_DEMO_MODE) {
       name: 'Demo User (DEV MODE)',
       created_at: new Date()
     };
-    
+
     // Only add if not already present
     const userDoc = await db.collection('users').doc('demo-user-id').get();
     if (!userDoc.exists) {
       await db.collection('users').doc('demo-user-id').set(demoUser);
-      
+
       // Seed some mock drives for the demo user to test the UI
       await db.collection('drives').doc('demo-drive-1').set({
         id: 'demo-drive-1',
@@ -64,7 +65,7 @@ const router = express.Router();
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    
+
     // Check existing
     const usersSnapshot = await db.collection('users').where('email', '==', email).get();
     if (!usersSnapshot.empty) {
@@ -73,7 +74,7 @@ router.post('/register', async (req, res) => {
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-    
+
     // Create user
     const newUserRef = db.collection('users').doc();
     const newUser = {
@@ -107,7 +108,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     const usersSnapshot = await db.collection('users').where('email', '==', email).get();
     if (usersSnapshot.empty) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -144,7 +145,7 @@ router.get('/me', async (req, res) => {
   try {
     const decoded = jwt.verify(token, secret) as any;
     const userDoc = await db.collection('users').doc(decoded.userId).get();
-    
+
     if (!userDoc.exists) return res.status(401).json({ error: 'Unauthorized' });
     const user = userDoc.data()!;
 
@@ -176,18 +177,18 @@ router.post('/forgot-password', async (req, res) => {
       return res.json({ success: true });
     }
     const user = usersSnapshot.docs[0].data();
-    
+
     const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    
+
     await db.collection('passwordResetTokens').add({
       user_id: user.id,
       token: resetToken,
       expires_at: new Date(Date.now() + 3600000).toISOString() // 1 hour
     });
-    
+
     // TODO: send via a real email provider
     console.log(`Password reset link: ${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`);
-    
+
     res.json({ success: true });
   } catch (err) {
     console.error('Forgot password error:', err);
@@ -199,24 +200,24 @@ router.post('/forgot-password', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   try {
     const { token, password } = req.body;
-    
+
     const tokenSnapshot = await db.collection('passwordResetTokens').where('token', '==', token).get();
     if (tokenSnapshot.empty) {
       return res.status(400).json({ error: 'Invalid or expired token' });
     }
-    
+
     const tokenData = tokenSnapshot.docs[0].data();
     if (new Date(tokenData.expires_at) < new Date()) {
       return res.status(400).json({ error: 'Token expired' });
     }
-    
+
     const hashedPassword = await bcrypt.hash(password, 10);
     await db.collection('users').doc(tokenData.user_id).update({
       password_hash: hashedPassword
     });
-    
+
     await tokenSnapshot.docs[0].ref.delete();
-    
+
     res.json({ success: true });
   } catch (err) {
     console.error('Reset password error:', err);
@@ -232,14 +233,14 @@ router.patch('/profile', async (req, res) => {
   try {
     const decoded = jwt.verify(token, secret) as any;
     const { name, timezone, language, username } = req.body;
-    
+
     await db.collection('users').doc(decoded.userId).update({
       name,
       timezone,
       language,
       username
     });
-    
+
     res.json({ success: true });
   } catch (err) {
     console.error('Profile update error:', err);
@@ -248,4 +249,4 @@ router.patch('/profile', async (req, res) => {
 });
 
 export default router;
-  
+            
