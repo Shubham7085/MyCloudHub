@@ -54,6 +54,7 @@ router.get('/google/connect', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
+// 2. Google OAuth Callback
 router.get('/google/callback', async (req, res) => {
   try {
     const { code, error, state } = req.query;
@@ -97,6 +98,7 @@ router.get('/google/callback', async (req, res) => {
     const totalSpace = parseInt(quota?.limit || '0', 10);
     const usedSpace = parseInt(quota?.usage || '0', 10);
 
+    // FIX: Check existing drive BEFORE using it
     const existingDriveSnapshot = await db.collection('drives')
       .where('user_id', '==', userId)
       .where('provider', '==', 'google')
@@ -137,6 +139,7 @@ router.get('/google/callback', async (req, res) => {
     res.redirect('/drives?error=' + encodeURIComponent('Failed to connect to Google Drive.'));
   }
 });
+
 // 3. Get User Drives
 router.get('/', requireAuth, async (req: AuthRequest, res) => {
   try {
@@ -163,12 +166,12 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// Create resumable upload session
+// 4. Create resumable upload session
 router.post('/:id/upload/session', requireAuth, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { name, mimeType, parentId, size } = req.body;
-    
+
     if (!name || !mimeType) {
       return res.status(400).json({ error: 'Missing name or mimeType' });
     }
@@ -220,15 +223,15 @@ router.post('/:id/upload/session', requireAuth, async (req: AuthRequest, res) =>
   }
 });
 
-// Search across all drives
+// 5. Search across all drives
 router.get('/search/all', requireAuth, async (req: AuthRequest, res) => {
   const query = req.query.q as string;
   if (!query) return res.json({ results: [] });
 
   const drivesSnapshot = await db.collection('drives').where('user_id', '==', req.user!.id).where('provider', '==', 'google').get();
-  
+
   let allResults: any[] = [];
-  
+
   for (const doc of drivesSnapshot.docs) {
     const driveRecord = doc.data();
     if (req.user!.id === 'demo-user-id') {
@@ -247,7 +250,7 @@ router.get('/search/all', requireAuth, async (req: AuthRequest, res) => {
       });
 
       const drive = google.drive({ version: 'v3', auth: oauth2Client });
-      
+
       const response = await drive.files.list({
         q: `name contains '${query.replace(/'/g, "\'")}' and trashed = false`,
         fields: 'files(id, name, mimeType, webViewLink)',
@@ -264,11 +267,11 @@ router.get('/search/all', requireAuth, async (req: AuthRequest, res) => {
   res.json({ results: allResults });
 });
 
-// Cross-drive queries
+// 6. Cross-drive queries
 router.get('/all/:mode', requireAuth, async (req: AuthRequest, res) => {
   const { mode } = req.params;
   const drivesSnapshot = await db.collection('drives').where('user_id', '==', req.user!.id).where('provider', '==', 'google').get();
-  
+
   if (req.user!.id === 'demo-user-id') {
     return res.json({
       files: [
@@ -288,7 +291,7 @@ router.get('/all/:mode', requireAuth, async (req: AuthRequest, res) => {
           refresh_token: driveRecord.refresh_token,
         });
         const drive = google.drive({ version: 'v3', auth: oauth2Client });
-        
+
         let q = '';
         let orderBy = '';
         switch(mode) {
@@ -332,9 +335,9 @@ router.get('/all/:mode', requireAuth, async (req: AuthRequest, res) => {
 
     const resultsArray = await Promise.all(promises);
     let allFiles = resultsArray.flat();
-    
+
     allFiles.sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime());
-    
+
     res.json({ files: allFiles.slice(0, 50) });
   } catch (err) {
     console.error('Cross-drive query error:', err);
@@ -342,7 +345,7 @@ router.get('/all/:mode', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// Analytics: Find Duplicates
+// 7. Analytics: Find Duplicates
 router.get('/analytics/duplicates', requireAuth, async (req: AuthRequest, res) => {
   if (req.user!.id === 'demo-user-id') {
     return res.json({
@@ -369,7 +372,7 @@ router.get('/analytics/duplicates', requireAuth, async (req: AuthRequest, res) =
   res.json({ duplicates: [] });
 });
 
-// Upload a file
+// 8. Upload a file
 router.post('/:id/upload', requireAuth, upload.single('file'), async (req: AuthRequest, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -393,7 +396,7 @@ router.post('/:id/upload', requireAuth, upload.single('file'), async (req: AuthR
     });
 
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
-    
+
     const bufferStream = new Readable();
     bufferStream.push(req.file.buffer);
     bufferStream.push(null);
@@ -414,7 +417,7 @@ router.post('/:id/upload', requireAuth, upload.single('file'), async (req: AuthR
   }
 });
 
-// Delete a file
+// 9. Delete a file
 router.delete('/:id/files/:fileId', requireAuth, async (req: AuthRequest, res) => {
   const driveDoc = await db.collection('drives').doc(req.params.id).get();
   if (!driveDoc.exists) return res.status(404).json({ error: 'Drive not found' });
@@ -427,19 +430,19 @@ router.delete('/:id/files/:fileId', requireAuth, async (req: AuthRequest, res) =
     const oauth2Client = getOAuth2Client(req);
     oauth2Client.setCredentials({ access_token: driveRecord.access_token, refresh_token: driveRecord.refresh_token });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
-    
+
     await drive.files.update({
       fileId: req.params.fileId,
       requestBody: { trashed: true }
     });
-    
+
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to delete file', details: error.message });
   }
 });
 
-// Rename a file
+// 10. Rename a file
 router.patch('/:id/files/:fileId/rename', requireAuth, async (req: AuthRequest, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'New name is required' });
@@ -455,7 +458,7 @@ router.patch('/:id/files/:fileId/rename', requireAuth, async (req: AuthRequest, 
     const oauth2Client = getOAuth2Client(req);
     oauth2Client.setCredentials({ access_token: driveRecord.access_token, refresh_token: driveRecord.refresh_token });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
-    
+
     await drive.files.update({ fileId: req.params.fileId, requestBody: { name } });
     res.json({ success: true });
   } catch (error: any) {
@@ -463,7 +466,7 @@ router.patch('/:id/files/:fileId/rename', requireAuth, async (req: AuthRequest, 
   }
 });
 
-// Create folder
+// 11. Create folder
 router.post('/:id/folders', requireAuth, async (req: AuthRequest, res) => {
   const { name, parentId = 'root' } = req.body;
   if (!name) return res.status(400).json({ error: 'Folder name is required' });
@@ -481,44 +484,44 @@ router.post('/:id/folders', requireAuth, async (req: AuthRequest, res) => {
     const oauth2Client = getOAuth2Client(req);
     oauth2Client.setCredentials({ access_token: driveRecord.access_token, refresh_token: driveRecord.refresh_token });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
-    
+
     const response = await drive.files.create({
       requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
       fields: 'id, name, mimeType, modifiedTime'
     });
-    
+
     res.json({ success: true, folder: response.data });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to create folder' });
   }
 });
 
-// Download a file
+// 12. Download a file
 router.get('/:id/files/:fileId/download', requireAuth, async (req: AuthRequest, res) => {
   const driveDoc = await db.collection('drives').doc(req.params.id).get();
   if (!driveDoc.exists) return res.status(404).json({ error: 'Drive not found' });
   const driveRecord = driveDoc.data()!;
   if (driveRecord.user_id !== req.user!.id) return res.status(404).json({ error: 'Drive not found' });
-  
+
   if (req.user!.id === 'demo-user-id') {
-     return res.status(404).json({ error: 'Demo user cannot download actual files.' });
+    return res.status(404).json({ error: 'Demo user cannot download actual files.' });
   }
-  
+
   try {
     const oauth2Client = getOAuth2Client(req);
     oauth2Client.setCredentials({ access_token: driveRecord.access_token, refresh_token: driveRecord.refresh_token });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
-    
+
     const file = await drive.files.get({ fileId: req.params.fileId, fields: 'name, mimeType' });
-    
+
     if (file.data.mimeType?.includes('application/vnd.google-apps.')) {
       return res.status(400).json({ error: 'Cannot directly download Google Workspace documents. Please open them in Drive.' });
     }
-    
+
     res.setHeader('Content-Disposition', `attachment; filename="${file.data.name}"`);
-    
+
     const response = await drive.files.get({ fileId: req.params.fileId, alt: 'media' }, { responseType: 'stream' });
-    
+
     response.data
       .on('end', () => {})
       .on('error', (err: any) => {
@@ -526,14 +529,14 @@ router.get('/:id/files/:fileId/download', requireAuth, async (req: AuthRequest, 
         if (!res.headersSent) res.status(500).end();
       })
       .pipe(res);
-      
+
   } catch (error: any) {
     console.error('Download error:', error);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to download file' });
   }
 });
 
-// 4. Disconnect Drive
+// 13. Disconnect Drive
 router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
     const driveDoc = await db.collection('drives').doc(req.params.id).get();
@@ -549,7 +552,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// 5. Refresh Drive Quota
+// 14. Refresh Drive Quota
 router.post('/:id/sync', requireAuth, async (req: AuthRequest, res) => {
   const driveDoc = await db.collection('drives').doc(req.params.id).get();
   if (!driveDoc.exists) return res.status(404).json({ error: 'Drive not found' });
@@ -578,7 +581,7 @@ router.post('/:id/sync', requireAuth, async (req: AuthRequest, res) => {
 
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
     const about = await drive.about.get({ fields: 'storageQuota' });
-    
+
     const quota = about.data.storageQuota;
     const totalSpace = parseInt(quota?.limit || '0', 10);
     const usedSpace = parseInt(quota?.usage || '0', 10);
@@ -597,7 +600,7 @@ router.post('/:id/sync', requireAuth, async (req: AuthRequest, res) => {
 
     await driveDoc.ref.update(updateData);
     driveRecord = { ...driveRecord, ...updateData };
-    
+
     res.json({ success: true, drive: driveRecord });
   } catch (error: any) {
     console.error('Error syncing drive:', error);
@@ -606,7 +609,7 @@ router.post('/:id/sync', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// 6. List Files
+// 15. List Files
 router.get('/:id/files', requireAuth, async (req: AuthRequest, res) => {
   const driveDoc = await db.collection('drives').doc(req.params.id).get();
   if (!driveDoc.exists) return res.status(404).json({ error: 'Drive not found' });
@@ -616,7 +619,7 @@ router.get('/:id/files', requireAuth, async (req: AuthRequest, res) => {
   const { folderId = 'root', pageToken, sortBy = 'name', sortDir = 'asc', filter = 'all' } = req.query;
 
   if (req.user!.id === 'demo-user-id') {
-    const mockFiles = [];
+    const mockFiles: any[] = [];
     if (folderId === 'root') {
       mockFiles.push(
         { id: 'folder1', name: 'Work Documents', mimeType: 'application/vnd.google-apps.folder', modifiedTime: new Date().toISOString() },
@@ -631,7 +634,7 @@ router.get('/:id/files', requireAuth, async (req: AuthRequest, res) => {
         { id: `file-${folderId}-2`, name: `Inside_${folderId}_2.png`, mimeType: 'image/png', size: '200000', modifiedTime: new Date().toISOString(), thumbnailLink: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&q=80&w=200' }
       );
     }
-    
+
     mockFiles.sort((a, b) => {
       if (a.mimeType.includes('folder') && !b.mimeType.includes('folder')) return -1;
       if (!a.mimeType.includes('folder') && b.mimeType.includes('folder')) return 1;
@@ -680,7 +683,7 @@ router.get('/:id/files', requireAuth, async (req: AuthRequest, res) => {
     if (newCredentials.access_token) updateData.access_token = newCredentials.access_token;
     if (newCredentials.refresh_token) updateData.refresh_token = newCredentials.refresh_token;
     if (newCredentials.expiry_date) updateData.expires_at = new Date(newCredentials.expiry_date).toISOString();
-    
+
     if (Object.keys(updateData).length > 0) {
       await driveDoc.ref.update(updateData);
     }
