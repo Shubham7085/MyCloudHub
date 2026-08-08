@@ -8,16 +8,21 @@ if (!getApps().length) {
     try {
       serviceAccount = JSON.parse(serviceAccountStr);
     } catch (e) {
-      serviceAccount = JSON.parse(Buffer.from(serviceAccountStr, 'base64').toString('utf8'));
+      try {
+        serviceAccount = JSON.parse(Buffer.from(serviceAccountStr, 'base64').toString('utf8'));
+      } catch (e2) {
+        throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY is invalid. Must be JSON or base64 encoded JSON.');
+      }
     }
-    initializeApp({
-      credential: cert(serviceAccount)
-    });
+    initializeApp({ credential: cert(serviceAccount) });
   } else {
-    initializeApp({
-      credential: applicationDefault()
-    });
+    try {
+      initializeApp({ credential: applicationDefault() });
+    } catch (e) {
+      throw new Error('Firebase init failed. Set FIREBASE_SERVICE_ACCOUNT_KEY env var in Vercel.');
+    }
   }
 }
 
 export const db = getFirestore();
+
