@@ -33,3 +33,33 @@ export const getFileIcon = (mimeType: string) => {
 };
 
 export const isFolder = (mimeType: string) => mimeType === 'application/vnd.google-apps.folder';
+
+// Buckets used by the Storage Breakdown widgets on the Dashboard.
+export type StorageCategory = 'documents' | 'images' | 'videos' | 'audio' | 'archives' | 'other';
+
+export const getStorageCategory = (mimeType?: string): StorageCategory => {
+  if (!mimeType) return 'other';
+  if (mimeType.includes('image')) return 'images';
+  if (mimeType.includes('video')) return 'videos';
+  if (mimeType.includes('audio')) return 'audio';
+  if (mimeType.includes('zip') || mimeType.includes('archive') || mimeType.includes('rar') || mimeType.includes('tar') || mimeType.includes('7z') || mimeType.includes('gzip')) return 'archives';
+  if (
+    mimeType.includes('pdf') ||
+    mimeType.includes('document') ||
+    mimeType.includes('word') ||
+    mimeType.includes('text') ||
+    mimeType.includes('spreadsheet') ||
+    mimeType.includes('presentation')
+  ) return 'documents';
+  return 'other';
+};
+
+// Type union used by <RecentFileItem />.
+export const getRecentFileType = (mimeType?: string): 'folder' | 'document' | 'image' | 'video' | 'other' => {
+  if (!mimeType) return 'other';
+  if (isFolder(mimeType)) return 'folder';
+  if (mimeType.includes('image')) return 'image';
+  if (mimeType.includes('video')) return 'video';
+  if (mimeType.includes('pdf') || mimeType.includes('document') || mimeType.includes('word') || mimeType.includes('text') || mimeType.includes('spreadsheet') || mimeType.includes('presentation')) return 'document';
+  return 'other';
+};
