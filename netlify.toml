@@ -8,16 +8,15 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["express", "cookie-parser", "googleapis", "firebase-admin", "jsonwebtoken", "bcryptjs", "multer", "serverless-http"]
 
-# Route all /api/* calls to our single Express function (auth + drives routes)
+# Route all /api/* calls to our single Express function
 [[redirects]]
   force = true
   from = "/api/*"
   status = 200
   to = "/.netlify/functions/api/:splat"
 
-# SPA fallback so client-side routing (react-router) works on refresh/deep links
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
