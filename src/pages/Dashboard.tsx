@@ -23,32 +23,14 @@ export function Dashboard() {
     fetchDrives();
   }, [fetchDrives]);
 
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'OAUTH_SUCCESS') {
-        fetchDrives();
-      } else if (event.data?.type === 'OAUTH_ERROR') {
-        alert(event.data.payload || 'Failed to connect drive');
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [fetchDrives]);
-
   const handleConnectDrive = () => {
     if (drives.length >= 5) {
       alert('Maximum of 5 accounts reached.');
       return;
     }
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-    window.open(
-      '/api/drives/google/connect',
-      'Connect Google Drive',
-      `width=${width},height=${height},left=${left},top=${top},popup=true`
-    );
+    // Full-page redirect (not a popup) — popups get blocked/broken on mobile
+    // browsers, so the whole tab navigates to Google and back to /drives.
+    window.location.href = '/api/drives/google/connect';
   };
 
   const totalUsedStorage = drives.reduce((acc, d) => acc + (d.used_space || 0), 0);

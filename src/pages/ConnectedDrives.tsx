@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useDriveStore } from '../store/driveStore';
 import { Button } from '../components/ui/Button';
 import { HardDrive, Trash2, Plus, ExternalLink, RefreshCw } from 'lucide-react';
@@ -6,34 +7,30 @@ import { HardDrive, Trash2, Plus, ExternalLink, RefreshCw } from 'lucide-react';
 export function ConnectedDrives() {
   const { drives, isLoading, error, fetchDrives, disconnectDrive } = useDriveStore();
   const [isSyncing, setIsSyncing] = useState<Record<string, boolean>>({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [oauthNotice, setOauthNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchDrives();
   }, [fetchDrives]);
 
+  // Backend does a full-page redirect back to /drives?connected=true (or ?error=...)
+  // after the Google OAuth flow finishes. Pick that up here and clean the URL.
+  useEffect(() => {
+    if (searchParams.get('connected') === 'true') {
+      setOauthNotice({ type: 'success', message: 'Google Drive connected successfully.' });
+      fetchDrives();
+      setSearchParams({}, { replace: true });
+    } else if (searchParams.get('error')) {
+      setOauthNotice({ type: 'error', message: searchParams.get('error') || 'Failed to connect drive.' });
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams, fetchDrives]);
+
   const handleConnect = () => {
-    const width = 600;
-    const height = 700;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-    
-    window.open(
-      '/api/drives/google/connect',
-      'Connect Google Drive',
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-
-    const messageListener = (event: MessageEvent) => {
-      if (event.data?.type === 'OAUTH_SUCCESS') {
-        fetchDrives();
-        window.removeEventListener('message', messageListener);
-      } else if (event.data?.type === 'OAUTH_ERROR') {
-        alert(event.data.payload || 'Failed to connect');
-        window.removeEventListener('message', messageListener);
-      }
-    };
-
-    window.addEventListener('message', messageListener);
+    // Full-page redirect (not a popup) — popups get blocked/broken on mobile
+    // browsers, so the whole tab navigates to Google and back.
+    window.location.href = '/api/drives/google/connect';
   };
 
   const handleSync = async (driveId: string) => {
@@ -76,6 +73,18 @@ export function ConnectedDrives() {
           <Plus className="w-4 h-4" /> Connect Drive
         </Button>
       </div>
+
+      {oauthNotice && (
+        <div
+          className={`p-4 rounded-xl text-sm border font-medium ${
+            oauthNotice.type === 'success'
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+              : 'bg-red-50 text-red-600 border-red-100'
+          }`}
+        >
+          {oauthNotice.message}
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100 font-medium">
