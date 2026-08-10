@@ -536,6 +536,63 @@ router.get('/:id/files/:fileId/download', requireAuth, async (req: AuthRequest, 
   }
 });
 
+// 12b. Stream a file inline — used for in-app image/video preview so the
+// browser never has to open a drive.google.com link directly (which, on a
+// phone signed into multiple Google accounts, pops the account-chooser
+// instead of just showing the file). Supports Range requests so <video>
+// can seek.
+router.get('/:id/files/:fileId/stream', requireAuth, async (req: AuthRequest, res) => {
+  const driveDoc = await db.collection('drives').doc(req.params.id).get();
+  if (!driveDoc.exists) return res.status(404).json({ error: 'Drive not found' });
+  const driveRecord = driveDoc.data()!;
+  if (driveRecord.user_id !== req.user!.id) return res.status(404).json({ error: 'Drive not found' });
+
+  if (req.user!.id === 'demo-user-id') {
+    return res.status(404).json({ error: 'Demo user cannot stream actual files.' });
+  }
+
+  try {
+    const oauth2Client = getOAuth2Client(req);
+    oauth2Client.setCredentials({ access_token: driveRecord.access_token, refresh_token: driveRecord.refresh_token });
+    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+    const file = await drive.files.get({ fileId: req.params.fileId, fields: 'name, mimeType' });
+
+    if (file.data.mimeType?.includes('application/vnd.google-apps.')) {
+      return res.status(400).json({ error: 'Cannot stream Google Workspace documents.' });
+    }
+
+    if (file.data.mimeType) res.setHeader('Content-Type', file.data.mimeType);
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
+    const range = req.headers.range;
+    const response = await drive.files.get(
+      { fileId: req.params.fileId, alt: 'media' },
+      { responseType: 'stream', headers: range ? { Range: range } : {} }
+    );
+
+    const googleStatus = (response as any).status || 200;
+    res.status(googleStatus);
+    const passthroughHeaders = ['content-range', 'content-length', 'accept-ranges'];
+    for (const h of passthroughHeaders) {
+      const value = (response.headers as any)?.[h];
+      if (value) res.setHeader(h, value as string);
+    }
+
+    response.data
+      .on('error', (err: any) => {
+        console.error('Error streaming file:', err);
+        if (!res.headersSent) res.status(500).end();
+      })
+      .pipe(res);
+
+  } catch (error: any) {
+    console.error('Stream error:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to stream file' });
+  }
+});
+
 // 13. Disconnect Drive
 router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
