@@ -1,14 +1,19 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { db } from './db.js';
 
+// SECURITY FIX: Strict JWT_SECRET check — no fallback, no hardcoded secret
 const JWT_SECRET = process.env.JWT_SECRET;
-// REMOVED: Top-level throw that crashes module loading
-// if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
-//   throw new Error('JWT_SECRET environment variable is required in production');
-// }
-const secret = JWT_SECRET || 'dev-secret';
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required. Set it in your .env or hosting dashboard before starting the server.');
+}
 
 // DEV DEMO MODE CONFIGURATION
 const ENABLE_DEMO_MODE = process.env.NODE_ENV !== 'production';
@@ -87,16 +92,16 @@ router.post('/register', async (req, res) => {
     await newUserRef.set(newUser);
 
     // Create session
-    const token = jwt.sign({ userId: newUser.id }, secret, { expiresIn: '7d' });
-    res.cookie('auth_token', token, { 
-      httpOnly: true, 
+    const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('auth_token', token, {
+      httpOnly: true,
       secure: true,
       sameSite: 'none',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
-    res.status(201).json({ 
-      user: { id: newUser.id, name: newUser.name, email: newUser.email } 
+    res.status(201).json({
+      user: { id: newUser.id, name: newUser.name, email: newUser.email }
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -120,16 +125,16 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ userId: user.id }, secret, { expiresIn: '7d' });
-    res.cookie('auth_token', token, { 
-      httpOnly: true, 
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('auth_token', token, {
+      httpOnly: true,
       secure: true,
       sameSite: 'none',
-      maxAge: 7 * 24 * 60 * 60 * 1000 
+      maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
-    res.json({ 
-      user: { id: user.id, name: user.name, email: user.email } 
+    res.json({
+      user: { id: user.id, name: user.name, email: user.email }
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -143,14 +148,14 @@ router.get('/me', async (req, res) => {
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const decoded = jwt.verify(token, secret) as any;
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
     const userDoc = await db.collection('users').doc(decoded.userId).get();
 
     if (!userDoc.exists) return res.status(401).json({ error: 'Unauthorized' });
     const user = userDoc.data()!;
 
-    res.json({ 
-      user: { id: user.id, name: user.name, email: user.email } 
+    res.json({
+      user: { id: user.id, name: user.name, email: user.email }
     });
   } catch (err) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -178,7 +183,8 @@ router.post('/forgot-password', async (req, res) => {
     }
     const user = usersSnapshot.docs[0].data();
 
-    const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // SECURITY FIX: Use cryptographically secure random token instead of Math.random()
+    const resetToken = crypto.randomBytes(32).toString('hex');
 
     await db.collection('passwordResetTokens').add({
       user_id: user.id,
@@ -231,7 +237,7 @@ router.patch('/profile', async (req, res) => {
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const decoded = jwt.verify(token, secret) as any;
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
     const { name, timezone, language, username } = req.body;
 
     await db.collection('users').doc(decoded.userId).update({
@@ -249,4 +255,3 @@ router.patch('/profile', async (req, res) => {
 });
 
 export default router;
-            
