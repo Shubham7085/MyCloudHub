@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useUploadStore } from '../store/uploadStore';
 import { useDropzone } from 'react-dropzone';
@@ -52,6 +52,7 @@ import { X as CloseIcon } from 'lucide-react';
 
 export function DriveExplorer() {
   const { id: driveId } = useParams<{ id: string }>();
+  const location = useLocation();
   const { drives, fetchDrives } = useDriveStore();
   
   const drive = drives.find(d => d.id === driveId);
@@ -60,14 +61,21 @@ export function DriveExplorer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const [folderStack, setFolderStack] = useState<Breadcrumb[]>([{ id: 'root', name: 'My Drive' }]);
+  // Dashboard can deep-link straight into a folder or a pre-filtered view
+  // (e.g. tapping "Videos" in Storage Breakdown) by passing router state.
+  const navState = location.state as { initialFolder?: Breadcrumb; initialFilter?: 'all' | 'images' | 'videos' | 'documents' | 'audio' | 'archives' | 'other' } | null;
+  const [folderStack, setFolderStack] = useState<Breadcrumb[]>(
+    navState?.initialFolder ? [{ id: 'root', name: 'My Drive' }, navState.initialFolder] : [{ id: 'root', name: 'My Drive' }]
+  );
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
   
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size' | 'type'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [filter, setFilter] = useState<'all' | 'images' | 'videos' | 'documents' | 'audio' | 'archives' | 'other'>('all');
+  const [filter, setFilter] = useState<'all' | 'images' | 'videos' | 'documents' | 'audio' | 'archives' | 'other'>(
+    navState?.initialFilter || 'all'
+  );
 
   const [selectedActionFile, setSelectedActionFile] = useState<DriveFile | null>(null);
   const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);

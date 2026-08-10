@@ -2,10 +2,9 @@ import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { DriveCard } from '../components/dashboard/DriveCard';
 import { StorageCategoryCard } from '../components/dashboard/StorageCategoryCard';
 import { RecentFileItem } from '../components/dashboard/RecentFileItem';
-import { StorageChart, StorageChartDatum } from '../components/dashboard/StorageChart';
 import { FilePreviewModal, PreviewableFile } from '../components/dashboard/FilePreviewModal';
 import { Button } from '../components/ui/Button';
-import { Upload, Plus, FolderPlus, ArrowUpRight, Activity, Inbox } from 'lucide-react';
+import { Upload, Plus, FolderPlus, ArrowUpRight, Activity, Inbox, Folder, DownloadCloud } from 'lucide-react';
 import { Tabs } from '../components/ui/Tabs';
 import { Avatar } from '../components/ui/Avatar';
 import { motion } from 'motion/react';
@@ -28,6 +27,13 @@ interface DriveFile {
   owners?: { displayName?: string; photoLink?: string }[];
 }
 
+interface RootFolder {
+  id: string;
+  name: string;
+  driveId: string;
+  driveName: string;
+}
+
 const CATEGORY_META: Record<StorageCategory, { label: string; color: string }> = {
   documents: { label: 'Documents', color: '#3b82f6' },
   images: { label: 'Images', color: '#10b981' },
@@ -41,12 +47,15 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState('all');
   const { user } = useAuthStore();
   const { drives, fetchDrives, disconnectDrive, syncDrive } = useDriveStore();
+  const { tasks } = useUploadStore();
   const firstName = user?.name?.split(' ')[0] || 'User';
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [recentFiles, setRecentFiles] = useState<DriveFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [rootFolders, setRootFolders] = useState<RootFolder[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
   const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
 
   useEffect(() => {
@@ -75,6 +84,36 @@ export function Dashboard() {
   useEffect(() => {
     loadRecentFiles();
   }, [loadRecentFiles]);
+
+  const loadRootFolders = useCallback(async () => {
+    if (drives.length === 0) {
+      setRootFolders([]);
+      return;
+    }
+    setFoldersLoading(true);
+    try {
+      const results = await Promise.all(
+        drives.map(async d => {
+          const res = await fetch(`/api/drives/${d.id}/files?folderId=root&sortBy=name&sortDir=asc`, { credentials: 'include' });
+          if (!res.ok) return [];
+          const data = await res.json();
+          const driveName = d.provider === 'google' ? 'Google Drive' : 'Cloud Drive';
+          return (data.files || [])
+            .filter((f: any) => f.mimeType === 'application/vnd.google-apps.folder')
+            .map((f: any) => ({ id: f.id, name: f.name, driveId: d.id, driveName }));
+        })
+      );
+      setRootFolders(results.flat());
+    } catch (err) {
+      console.error('Failed to load folders:', err);
+    } finally {
+      setFoldersLoading(false);
+    }
+  }, [drives]);
+
+  useEffect(() => {
+    loadRootFolders();
+  }, [loadRootFolders]);
 
   const handleConnectDrive = () => {
     if (drives.length >= 5) {
@@ -134,7 +173,7 @@ export function Dashboard() {
 
   const handleRecentFileClick = (file: DriveFile) => {
     if (isFolder(file.mimeType)) {
-      navigate(`/drives/${file.driveId}`);
+      navigate(`/drives/${file.driveId}`, { state: { initialFolder: { id: file.id, name: file.name } } });
       return;
     }
     if (file.mimeType.includes('image') || file.mimeType.includes('video')) {
@@ -142,6 +181,16 @@ export function Dashboard() {
     } else if (file.webViewLink) {
       window.open(file.webViewLink, '_blank');
     }
+  };
+
+  const handleFolderClick = (folder: RootFolder) => {
+    navigate(`/drives/${folder.driveId}`, { state: { initialFolder: { id: folder.id, name: folder.name } } });
+  };
+
+  const handleCategoryClick = (categoryType: StorageCategory) => {
+    const driveId = requireADrive();
+    if (!driveId) return;
+    navigate(`/drives/${driveId}`, { state: { initialFilter: categoryType } });
   };
 
   const totalUsedStorage = drives.reduce((acc, d) => acc + (d.used_space || 0), 0);
@@ -152,7 +201,7 @@ export function Dashboard() {
   // Real storage breakdown, computed from the files we could see (most recent
   // files across your connected drives). Google Docs/Sheets/Slides don't
   // report a byte size via the API, so they're excluded from the byte totals.
-  const { chartData, categoryBreakdown } = useMemo(() => {
+  const categoryBreakdown = useMemo(() => {
     const totals: Record<StorageCategory, number> = {
       documents: 0, images: 0, videos: 0, audio: 0, archives: 0, other: 0,
     };
@@ -162,17 +211,18 @@ export function Dashboard() {
       totals[getStorageCategory(f.mimeType)] += bytes;
     }
     const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
-    const breakdown = (Object.keys(totals) as StorageCategory[]).map(cat => ({
+    return (Object.keys(totals) as StorageCategory[]).map(cat => ({
       type: cat,
       label: CATEGORY_META[cat].label,
       size: totals[cat],
       percentage: grandTotal > 0 ? Math.round((totals[cat] / grandTotal) * 1000) / 10 : 0,
     }));
-    const chart: StorageChartDatum[] = breakdown
-      .filter(b => b.size > 0)
-      .map(b => ({ name: b.label, value: b.percentage, color: CATEGORY_META[b.type].color }));
-    return { chartData: chart, categoryBreakdown: breakdown };
   }, [recentFiles]);
+
+  // Recent Activity tabs — "Uploads" reflects real files you've uploaded
+  // through MyCloudHub this session; "Downloads" isn't tracked yet, so it
+  // shows an honest empty state instead of duplicating the "All Files" list.
+  const completedUploads = tasks.filter(t => t.status === 'completed');
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-8">
@@ -277,19 +327,55 @@ export function Dashboard() {
         </div>
       </section>
 
+      {/* Folders */}
+      {drives.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-xl font-bold tracking-tight text-foreground">Folders</h2>
+          </div>
+          {foldersLoading ? (
+            <div className="p-6 text-center text-sm text-muted-foreground bg-card rounded-2xl border border-border/60">Loading folders...</div>
+          ) : rootFolders.length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground bg-card rounded-2xl border border-dashed border-border/60">
+              No folders yet — create one with "New Folder" above.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {rootFolders.map(folder => (
+                <button
+                  key={`${folder.driveId}-${folder.id}`}
+                  onClick={() => handleFolderClick(folder)}
+                  className="flex items-center gap-3 p-4 rounded-2xl border border-border/60 bg-card hover:border-border hover:shadow-md transition-all text-left"
+                >
+                  <div className="p-2.5 rounded-xl bg-blue-500/10 shrink-0">
+                    <Folder className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{folder.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{folder.driveName}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Storage Breakdown */}
       <section>
         <h2 className="text-xl font-bold tracking-tight text-foreground mb-1">Storage Breakdown</h2>
-        <p className="text-xs text-muted-foreground mb-4">Based on your most recently modified files.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <div className="sm:col-span-1">
-            <StorageChart data={chartData} />
-          </div>
-          <div className="sm:col-span-2 grid grid-cols-2 gap-4">
-            {categoryBreakdown.map(cat => (
-              <StorageCategoryCard key={cat.type} label={cat.label} size={cat.size} percentage={cat.percentage} type={cat.type} />
-            ))}
-          </div>
+        <p className="text-xs text-muted-foreground mb-4">Based on your most recently modified files. Tap a category to browse those files.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {categoryBreakdown.map(cat => (
+            <StorageCategoryCard
+              key={cat.type}
+              label={cat.label}
+              size={cat.size}
+              percentage={cat.percentage}
+              type={cat.type}
+              onClick={() => handleCategoryClick(cat.type)}
+            />
+          ))}
         </div>
       </section>
 
@@ -311,30 +397,61 @@ export function Dashboard() {
         </div>
         
         <div className="bg-card rounded-2xl border border-border/60 overflow-hidden shadow-sm">
-          {filesLoading ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">Loading recent files...</div>
-          ) : recentFiles.length === 0 ? (
+          {activeTab === 'all' && (
+            filesLoading ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">Loading recent files...</div>
+            ) : recentFiles.length === 0 ? (
+              <div className="p-10 flex flex-col items-center justify-center text-center gap-2">
+                <Inbox className="w-6 h-6 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  {drives.length === 0 ? 'Connect a drive to see recent files here.' : 'No files yet.'}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {recentFiles.slice(0, 8).map(file => (
+                  <RecentFileItem
+                    key={file.id}
+                    name={file.name}
+                    size={file.size ? parseInt(file.size, 10) : 0}
+                    modifiedAt={new Date(file.modifiedTime)}
+                    type={getRecentFileType(file.mimeType)}
+                    driveName={file.driveName}
+                    thumbnailUrl={file.thumbnailLink}
+                    owner={file.owners?.[0]?.displayName ? { name: file.owners[0].displayName!, avatarUrl: file.owners[0].photoLink || '' } : undefined}
+                    onClick={() => handleRecentFileClick(file)}
+                  />
+                ))}
+              </div>
+            )
+          )}
+
+          {activeTab === 'uploads' && (
+            completedUploads.length === 0 ? (
+              <div className="p-10 flex flex-col items-center justify-center text-center gap-2">
+                <Upload className="w-6 h-6 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No uploads yet this session.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {completedUploads.slice().reverse().map(task => (
+                  <RecentFileItem
+                    key={task.id}
+                    name={task.file.name}
+                    size={task.totalBytes}
+                    modifiedAt={new Date(task.startTime || Date.now())}
+                    type={getRecentFileType(task.file.type)}
+                    driveName={drives.find(d => d.id === task.driveId)?.email || 'Your drive'}
+                  />
+                ))}
+              </div>
+            )
+          )}
+
+          {activeTab === 'downloads' && (
             <div className="p-10 flex flex-col items-center justify-center text-center gap-2">
-              <Inbox className="w-6 h-6 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                {drives.length === 0 ? 'Connect a drive to see recent files here.' : 'No files yet.'}
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-border/60">
-              {recentFiles.slice(0, 8).map(file => (
-                <RecentFileItem
-                  key={file.id}
-                  name={file.name}
-                  size={file.size ? parseInt(file.size, 10) : 0}
-                  modifiedAt={new Date(file.modifiedTime)}
-                  type={getRecentFileType(file.mimeType)}
-                  driveName={file.driveName}
-                  thumbnailUrl={file.thumbnailLink}
-                  owner={file.owners?.[0]?.displayName ? { name: file.owners[0].displayName!, avatarUrl: file.owners[0].photoLink || '' } : undefined}
-                  onClick={() => handleRecentFileClick(file)}
-                />
-              ))}
+              <DownloadCloud className="w-6 h-6 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Downloads aren't tracked yet in this version.</p>
             </div>
           )}
         </div>
