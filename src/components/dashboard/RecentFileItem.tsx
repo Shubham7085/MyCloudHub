@@ -13,6 +13,7 @@ interface RecentFileProps {
   thumbnailUrl?: string;
   owner?: { name: string; avatarUrl: string };
   isStarred?: boolean;
+  onClick?: () => void;
 }
 
 export function RecentFileItem({ 
@@ -23,7 +24,8 @@ export function RecentFileItem({
   driveName,
   thumbnailUrl,
   owner,
-  isStarred = false
+  isStarred = false,
+  onClick
 }: RecentFileProps) {
   const getIcon = () => {
     switch (type) {
@@ -44,7 +46,7 @@ export function RecentFileItem({
   };
 
   return (
-    <Card className="group cursor-pointer hover:bg-muted/30 transition-all duration-200 border-transparent hover:border-border/60 shadow-none hover:shadow-sm">
+    <Card onClick={onClick} className="group cursor-pointer hover:bg-muted/30 transition-all duration-200 border-transparent hover:border-border/60 shadow-none hover:shadow-sm">
       <CardContent className="p-3 flex items-center justify-between">
         <div className="flex items-center gap-4 overflow-hidden flex-1">
           {thumbnailUrl ? (
