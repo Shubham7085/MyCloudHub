@@ -12,6 +12,27 @@ async function startServer() {
 
   app.set('trust proxy', 1);
 
+  // ✅ NAYA CODE: Custom CORS Setup (Mobile App aur Website dono ko allow karega)
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    // Agar request mobile app ya website se aayi hai, toh use allow karo
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    // Allowed methods aur headers
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    // OPTIONS request (Pre-flight check) ko turant pass karo
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   app.use(express.json());
   app.use(cookieParser());
 
