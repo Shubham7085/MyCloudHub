@@ -82,6 +82,7 @@ export function DriveExplorer() {
 
   const currentFolder = folderStack[folderStack.length - 1];
   const parentRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (drives.length === 0) fetchDrives();
@@ -309,8 +310,8 @@ export function DriveExplorer() {
             </Button>
             <div className="relative">
               <input 
+                ref={fileInputRef}
                 type="file" 
-                id="file-upload"
                 className="hidden" 
                 multiple
                 onChange={(e) => {
@@ -321,14 +322,10 @@ export function DriveExplorer() {
                   e.target.value = '';
                 }}
               />
-              <label htmlFor="file-upload">
-                <Button asChild size="sm" variant="default" className="gap-2 cursor-pointer">
-                  <span>
-                    <Upload className="w-4 h-4" />
-                    Upload
-                  </span>
-                </Button>
-              </label>
+              <Button size="sm" variant="default" className="gap-2" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="w-4 h-4" />
+                Upload
+              </Button>
             </div>
             <div className="flex items-center border border-border/50 rounded-lg p-1 bg-muted/50">
               <Button 

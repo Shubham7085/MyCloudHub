@@ -171,10 +171,8 @@ export function ConnectedDrives() {
                       <RefreshCw className={`w-3 h-3 mr-1.5 ${isSyncing[drive.id] ? 'animate-spin' : ''}`} />
                       Sync
                     </Button>
-                    <Button variant="secondary" size="sm" className="text-xs h-8" asChild>
-                      <a href={`/drives/${drive.id}`} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-3 h-3 mr-1.5" /> Open
-                      </a>
+                    <Button variant="secondary" size="sm" className="text-xs h-8" onClick={() => window.open(`/drives/${drive.id}`, '_blank', 'noopener,noreferrer')}>
+                      <ExternalLink className="w-3 h-3 mr-1.5" /> Open
                     </Button>
                   </div>
                 </div>
