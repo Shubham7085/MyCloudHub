@@ -46,7 +46,7 @@ interface Breadcrumb {
 
 import { FileActionModal } from '../components/dashboard/FileActionModal';
 import { formatSize, formatDate, getFileIcon, isFolder } from '../lib/fileUtils';
-import { ImagePreviewModal } from '../components/dashboard/ImagePreviewModal';
+import { FilePreviewModal, PreviewableFile } from '../components/dashboard/FilePreviewModal';
 import { AnimatePresence, motion } from 'motion/react';
 import { X as CloseIcon } from 'lucide-react';
 
@@ -70,7 +70,7 @@ export function DriveExplorer() {
   const [filter, setFilter] = useState<'all' | 'images' | 'videos' | 'documents' | 'audio' | 'archives' | 'other'>('all');
 
   const [selectedActionFile, setSelectedActionFile] = useState<DriveFile | null>(null);
-  const [previewFile, setPreviewFile] = useState<DriveFile | null>(null);
+  const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
 
   const currentFolder = folderStack[folderStack.length - 1];
   const parentRef = useRef<HTMLDivElement>(null);
@@ -183,12 +183,28 @@ export function DriveExplorer() {
   const handleFileClick = (file: DriveFile) => {
     if (isFolder(file.mimeType)) {
       handleNavigateToFolder(file.id, file.name);
-    } else if (file.mimeType.includes('image') && file.thumbnailLink) {
-      setPreviewFile(file);
+    } else if (file.mimeType.includes('image') || file.mimeType.includes('video')) {
+      setPreviewFile({ ...file, driveId });
     } else {
       window.open(file.webViewLink, '_blank');
     }
   };
+
+  const uploadTasks = useUploadStore(s => s.tasks);
+  const seenCompletedUploads = useRef<Set<string>>(new Set());
+
+  // If an upload targeting the folder we're currently looking at finishes,
+  // refresh the listing so the new file actually shows up without the user
+  // having to leave and come back.
+  useEffect(() => {
+    const relevantlyCompleted = uploadTasks.filter(
+      t => t.status === 'completed' && t.driveId === driveId && t.folderId === currentFolder.id && !seenCompletedUploads.current.has(t.id)
+    );
+    if (relevantlyCompleted.length > 0) {
+      relevantlyCompleted.forEach(t => seenCompletedUploads.current.add(t.id));
+      fetchFiles();
+    }
+  }, [uploadTasks, driveId, currentFolder.id, fetchFiles]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (!driveId) return;
@@ -474,7 +490,7 @@ export function DriveExplorer() {
         onDelete={handleDelete}
       />
 
-      <ImagePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 }

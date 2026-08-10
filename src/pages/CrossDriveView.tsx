@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDriveStore } from '../store/driveStore';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Folder, File as FileIcon, ImageIcon, Video, Music, Archive, FileText, ArrowUpDown, MoreVertical, HardDrive, Trash2, Clock, Star, Users } from 'lucide-react';
@@ -6,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
 import { formatSize, formatDate, getFileIcon, isFolder } from '../lib/fileUtils';
 import { FileActionModal } from '../components/dashboard/FileActionModal';
-import { ImagePreviewModal } from '../components/dashboard/ImagePreviewModal';
+import { FilePreviewModal, PreviewableFile } from '../components/dashboard/FilePreviewModal';
 import { AnimatePresence, motion } from 'motion/react';
 import { X as CloseIcon } from 'lucide-react';
 
@@ -16,12 +17,13 @@ interface CrossDriveViewProps {
 
 export function CrossDriveView({ mode }: CrossDriveViewProps) {
   const { drives } = useDriveStore();
+  const navigate = useNavigate();
   const [files, setFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const [selectedActionFile, setSelectedActionFile] = useState<any | null>(null);
-  const [previewFile, setPreviewFile] = useState<any | null>(null);
+  const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
   const fetchFiles = useCallback(async () => {
@@ -56,8 +58,15 @@ export function CrossDriveView({ mode }: CrossDriveViewProps) {
   const { title, icon } = getTitle();
 
   const handleFileClick = (file: any) => {
-    if (file.mimeType && file.mimeType.includes('image') && file.thumbnailLink) {
-      setPreviewFile(file);
+    if (isFolder(file.mimeType)) {
+      // This view is a flat, cross-drive list — it doesn't know how to drill
+      // into a specific subfolder, so take the person into that drive's
+      // explorer instead of bouncing them to drive.google.com directly.
+      if (file.driveId) navigate(`/drives/${file.driveId}`);
+      return;
+    }
+    if (file.mimeType && (file.mimeType.includes('image') || file.mimeType.includes('video'))) {
+      setPreviewFile({ ...file, driveId: file.driveId });
     } else if (file.webViewLink) {
       window.open(file.webViewLink, '_blank');
     }
@@ -175,7 +184,7 @@ export function CrossDriveView({ mode }: CrossDriveViewProps) {
         onDelete={async () => {}} // Disabled for cross-drive view for simplicity
       />
 
-      <ImagePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 }

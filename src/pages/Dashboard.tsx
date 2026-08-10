@@ -3,8 +3,9 @@ import { DriveCard } from '../components/dashboard/DriveCard';
 import { StorageCategoryCard } from '../components/dashboard/StorageCategoryCard';
 import { RecentFileItem } from '../components/dashboard/RecentFileItem';
 import { StorageChart, StorageChartDatum } from '../components/dashboard/StorageChart';
+import { FilePreviewModal, PreviewableFile } from '../components/dashboard/FilePreviewModal';
 import { Button } from '../components/ui/Button';
-import { Upload, Plus, FolderPlus, ArrowUpRight, Activity, Inbox, ListChecks } from 'lucide-react';
+import { Upload, Plus, FolderPlus, ArrowUpRight, Activity, Inbox } from 'lucide-react';
 import { Tabs } from '../components/ui/Tabs';
 import { Avatar } from '../components/ui/Avatar';
 import { motion } from 'motion/react';
@@ -12,7 +13,7 @@ import { useAuthStore } from '../store/authStore';
 import { useDriveStore } from '../store/driveStore';
 import { useUploadStore } from '../store/uploadStore';
 import { useNavigate } from 'react-router-dom';
-import { getStorageCategory, getRecentFileType, StorageCategory } from '../lib/fileUtils';
+import { getStorageCategory, getRecentFileType, isFolder, StorageCategory } from '../lib/fileUtils';
 
 interface DriveFile {
   id: string;
@@ -40,13 +41,13 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState('all');
   const { user } = useAuthStore();
   const { drives, fetchDrives, disconnectDrive, syncDrive } = useDriveStore();
-  const { tasks } = useUploadStore();
   const firstName = user?.name?.split(' ')[0] || 'User';
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [recentFiles, setRecentFiles] = useState<DriveFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
 
   useEffect(() => {
     fetchDrives();
@@ -131,6 +132,18 @@ export function Dashboard() {
     e.target.value = '';
   };
 
+  const handleRecentFileClick = (file: DriveFile) => {
+    if (isFolder(file.mimeType)) {
+      navigate(`/drives/${file.driveId}`);
+      return;
+    }
+    if (file.mimeType.includes('image') || file.mimeType.includes('video')) {
+      setPreviewFile({ ...file, driveId: file.driveId });
+    } else if (file.webViewLink) {
+      window.open(file.webViewLink, '_blank');
+    }
+  };
+
   const totalUsedStorage = drives.reduce((acc, d) => acc + (d.used_space || 0), 0);
   const totalStorageCapacity = drives.reduce((acc, d) => acc + (d.total_space || 0), 0);
   const totalUsedGB = (totalUsedStorage / (1024 * 1024 * 1024)).toFixed(1);
@@ -160,8 +173,6 @@ export function Dashboard() {
       .map(b => ({ name: b.label, value: b.percentage, color: CATEGORY_META[b.type].color }));
     return { chartData: chart, categoryBreakdown: breakdown };
   }, [recentFiles]);
-
-  const activeUploadTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'canceled');
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-8">
@@ -266,79 +277,21 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* Storage Breakdown & Queue */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Storage Breakdown */}
-        <section className="lg:col-span-2">
-          <h2 className="text-xl font-bold tracking-tight text-foreground mb-1">Storage Breakdown</h2>
-          <p className="text-xs text-muted-foreground mb-4">Based on your most recently modified files.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div className="sm:col-span-1">
-              <StorageChart data={chartData} />
-            </div>
-            <div className="sm:col-span-2 grid grid-cols-2 gap-4">
-              {categoryBreakdown.map(cat => (
-                <StorageCategoryCard key={cat.type} label={cat.label} size={cat.size} percentage={cat.percentage} type={cat.type} />
-              ))}
-            </div>
+      {/* Storage Breakdown */}
+      <section>
+        <h2 className="text-xl font-bold tracking-tight text-foreground mb-1">Storage Breakdown</h2>
+        <p className="text-xs text-muted-foreground mb-4">Based on your most recently modified files.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <div className="sm:col-span-1">
+            <StorageChart data={chartData} />
           </div>
-        </section>
-
-        {/* Active Queue */}
-        <section>
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xl font-bold tracking-tight text-foreground">Active Tasks</h2>
-            {activeUploadTasks.length > 0 && (
-              <span className="px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-semibold">{activeUploadTasks.length} Active</span>
-            )}
+          <div className="sm:col-span-2 grid grid-cols-2 gap-4">
+            {categoryBreakdown.map(cat => (
+              <StorageCategoryCard key={cat.type} label={cat.label} size={cat.size} percentage={cat.percentage} type={cat.type} />
+            ))}
           </div>
-          {activeUploadTasks.length === 0 ? (
-            <div className="p-8 rounded-2xl border border-dashed border-border/60 flex flex-col items-center justify-center text-center gap-2">
-              <ListChecks className="w-6 h-6 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">No active uploads right now.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {activeUploadTasks.map(task => {
-                const pct = task.progress || 0;
-                const formatSize = (bytes: number) => {
-                  const mb = bytes / (1024 * 1024);
-                  if (mb < 1) return `${(bytes / 1024).toFixed(1)} KB`;
-                  return `${mb.toFixed(1)} MB`;
-                };
-                return (
-                  <div key={task.id} className="p-5 rounded-2xl border border-border/60 bg-card shadow-sm hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2 bg-blue-500/10 rounded-lg shrink-0">
-                          <Upload className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-sm font-semibold text-foreground block truncate">{task.file.name}</span>
-                          <span className="text-[11px] text-muted-foreground font-medium capitalize">{task.status}</span>
-                        </div>
-                      </div>
-                      <span className="text-sm font-bold text-blue-600 shrink-0">{pct}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-muted rounded-full overflow-hidden mb-2">
-                      <motion.div
-                        initial={{ width: '0%' }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ duration: 0.5 }}
-                        className="h-full bg-blue-600 rounded-full"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-                      <span>{formatSize(task.uploadedBytes)} of {formatSize(task.totalBytes)}</span>
-                      {task.speed && task.eta ? <span>{formatSize(task.speed)}/s</span> : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
+        </div>
+      </section>
 
       {/* Recent Activity */}
       <section>
@@ -379,12 +332,15 @@ export function Dashboard() {
                   driveName={file.driveName}
                   thumbnailUrl={file.thumbnailLink}
                   owner={file.owners?.[0]?.displayName ? { name: file.owners[0].displayName!, avatarUrl: file.owners[0].photoLink || '' } : undefined}
+                  onClick={() => handleRecentFileClick(file)}
                 />
               ))}
             </div>
           )}
         </div>
       </section>
+
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 }
