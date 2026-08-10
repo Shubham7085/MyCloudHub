@@ -7,6 +7,8 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Mail, Lock } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+// ✅ Naya: Capacitor ko import kiya
+import { Capacitor } from '@capacitor/core';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -27,12 +29,17 @@ export function Login() {
   const onSubmit = async (data: LoginForm) => {
     setServerError(null);
     try {
-      const response = await fetch('/api/auth/login', {
+      // ✅ Naya: Check kiya ki app mobile mein hai ya website par
+      const API_BASE = Capacitor.isNativePlatform() ? "https://my-cloud-hub.vercel.app" : "";
+
+      // ✅ Naya: '/api/auth/login' ke aage API_BASE lagaya
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(data)
       });
+      
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.error || 'Failed to log in');
