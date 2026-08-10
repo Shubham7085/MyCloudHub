@@ -7,9 +7,10 @@ interface StorageCategoryCardProps {
   size: number;
   percentage: number;
   type: 'documents' | 'images' | 'videos' | 'audio' | 'archives' | 'other';
+  onClick?: () => void;
 }
 
-export function StorageCategoryCard({ label, size, percentage, type }: StorageCategoryCardProps) {
+export function StorageCategoryCard({ label, size, percentage, type, onClick }: StorageCategoryCardProps) {
   const getIcon = () => {
     switch (type) {
       case 'documents': return <FileText className="w-4 h-4 text-blue-500 dark:text-blue-400" />;
@@ -41,7 +42,7 @@ export function StorageCategoryCard({ label, size, percentage, type }: StorageCa
   };
 
   return (
-    <Card className="border-border/60 hover:border-border transition-colors group">
+    <Card onClick={onClick} className="border-border/60 hover:border-border transition-colors group cursor-pointer hover:shadow-md">
       <CardContent className="p-4 flex flex-col justify-between h-full min-h-[110px]">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
