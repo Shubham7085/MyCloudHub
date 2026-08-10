@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MyCloudHub</string>
+    <string name="title_activity_main">MyCloudHub</string>
+    <string name="package_name">com.mycloudhub.app</string>
+    <string name="custom_url_scheme">com.mycloudhub.app</string>
+</resources>
